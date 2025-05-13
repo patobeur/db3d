@@ -1,13 +1,11 @@
 <?php
-// db_structure.php
 
-header('Content-Type: application/json');
-
-// Configuration
 $host = 'localhost';
 $user = 'root';
 $password = ''; // à adapter
 $port = 3306;
+
+header('Content-Type: application/json');
 
 try {
     $pdo = new PDO("mysql:host=$host;port=$port", $user, $password);
@@ -26,12 +24,17 @@ try {
         $tablesStmt = $pdo->query("SHOW TABLES");
         $tables = $tablesStmt->fetchAll(PDO::FETCH_COLUMN);
 
+
         $tablesInfo = [];
 
         foreach ($tables as $table) {
             // Nombre de colonnes
             $colsStmt = $pdo->query("DESCRIBE `$table`");
             $columns = $colsStmt->rowCount();
+            $columnsInfo = $colsStmt->fetchAll(PDO::FETCH_ASSOC);// +
+
+            // Extraire juste les noms des colonnes (champ 'Field')
+            $nomsDesColonnes = array_map(fn($col) => $col['Field'], $columnsInfo);
 
             // Nombre de lignes
             $rowsStmt = $pdo->query("SELECT COUNT(*) FROM `$table`");
@@ -40,6 +43,7 @@ try {
             $tablesInfo[] = [
                 'name' => $table,
                 'columns' => $columns,
+                'nomsDesColonnes' => $nomsDesColonnes,
                 'rows' => $rowCount
             ];
         }
