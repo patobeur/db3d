@@ -27,7 +27,16 @@
     #info-content p {
       margin: 5px 0;
     }
-
+    #search-input {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      padding: 8px;
+      border-radius: 5px;
+      border: none;
+      font-size: 14px;
+      z-index: 11;
+    }
   </style>
 </head>
 <body>
@@ -38,6 +47,7 @@
       <p>Clique sur un objet pour voir ses détails.</p>
     </div>
   </div>
+  <input type="text" id="search-input" placeholder="Rechercher une base ou une table..." />
   <script type="module">
 		import * as THREE from 'https://cdn.jsdelivr.net/npm/three/build/three.module.js';
 		import { OrbitControls } from './jsm/controls/OrbitControls.js';
@@ -64,8 +74,15 @@
     scene.add(ambient);
 
     const light = new THREE.DirectionalLight(0xffffff, 0.8);
-    light.position.set(20, 50, 20);
+    light.position.set(0, 50, 0);
+
+    light.shadow.mapSize.width = 2028;
+    light.shadow.mapSize.height = 2028;
+    light.shadow.camera.near = 1;
+    light.shadow.camera.far = 500;
+
     light.castShadow = true;
+
     scene.add(light);
 
     const floorMaterial = new THREE.MeshStandardMaterial({ color: 0xffffff });
@@ -85,42 +102,57 @@
       .then(res => res.json())
       .then(data => {
         console.log(data)
-        let x = 0;
-        let xt = 0;
+        let baseZ = 0;
         data.forEach((db, i) => {
-          const dbBox = new THREE.Mesh(new THREE.BoxGeometry(3, 1, 3), baseMaterial.clone());
-          dbBox.position.set(x, 1, 0);
+          const dbBox = new THREE.Mesh(new THREE.BoxGeometry(4, 2, 4), baseMaterial.clone());
+          dbBox.position.set(0, 1, baseZ);
           dbBox.castShadow = true;
+          dbBox.receiveShadow = true;
           dbBox.userData = { type: 'database', name: db.name };
           scene.add(dbBox);
           clickableObjects.push(dbBox);
 
           const dbLabel = makeTextSprite(db.name, 0.5);
-          dbLabel.position.set(x, 3, 0);
+          dbLabel.position.set(0, 3, baseZ);
           scene.add(dbLabel);
 
-          db.tables.forEach((table, j) => {
-            const tBox = new THREE.Mesh(new THREE.BoxGeometry(1, 0.5, 1), tableMaterial.clone());
-            tBox.position.set(x, 0.5, (j + 3) * 1.5);
+          const tables = db.tables;
+          const tablesPerRow = 15;
+          const spacingX = 3;
+          const spacingZ = 3;
+
+          let rowCount = 0;
+
+          tables.forEach((table, j) => {
+            const col = j % tablesPerRow;
+            const row = Math.floor(j / tablesPerRow);
+            if (row > rowCount) rowCount = row;
+
+            const tBox = new THREE.Mesh(new THREE.BoxGeometry(2, 1, 2), tableMaterial.clone());
+            tBox.position.set(col * spacingX, 0.5, baseZ + (row + 1) * spacingZ);
             tBox.castShadow = true;
             tBox.userData = {
               type: 'table',
               name: table.name,
               db: db.name,
               columns: table.columns,
-              rows: table.rows
+              rows: table.rows,
+              nomsdescolonnes: table.nomsdescolonnes
             };
+            tBox.castShadow = true;
+            tBox.receiveShadow = true;
             scene.add(tBox);
             clickableObjects.push(tBox);
 
-            const tLabel = makeTextSprite(`${table.name} (${table.rows} lignes)`, 0.3);
-            tLabel.position.set(x, 2, (j + 3) * 1.5);
+            const tLabel = makeTextSprite(table.name, 0.3);
+            tLabel.position.set(tBox.position.x, 2, tBox.position.z);
             scene.add(tLabel);
           });
-          x += 3;
-          xt += 1;
+
+          baseZ += (rowCount + 1) * spacingZ + 6;
         });
-      });
+
+    });
 
     function makeTextSprite(message, scale = 1) {
       const canvas = document.createElement('canvas');
@@ -196,6 +228,20 @@
     }
 
     animate();
+
+
+    document.getElementById('search-input').addEventListener('input', (e) => {
+      const query = e.target.value.toLowerCase();
+
+      clickableObjects.forEach(obj => {
+        const name = obj.userData.name.toLowerCase();
+        if (name.includes(query)) {
+          obj.material.emissive.setHex(0x00ff00); // vert fluo si match
+        } else {
+          obj.material.emissive.setHex(0x000000);
+        }
+      });
+    });
   </script>
 </body>
 </html>
