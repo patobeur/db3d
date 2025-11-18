@@ -1,247 +1,280 @@
 <!DOCTYPE html>
 <html lang="fr">
-<head>
-  <meta charset="UTF-8">
-  <title>Visualisation SQL 3D</title>
-  <style>
-    body { margin: 0; overflow: hidden; }
-    canvas { display: block; }
-    #info-panel {
-      position: absolute;
-      top: 10px;
-      left: 10px;
-      background: rgba(20, 20, 20, 0.85);
-      color: white;
-      padding: 10px 15px;
-      border-radius: 8px;
-      max-width: 300px;
-      font-family: sans-serif;
-      font-size: 14px;
-      z-index: 10;
-      box-shadow: 0 0 10px black;
-    }
-    #info-panel h2 {
-      margin: 0 0 10px 0;
-      font-size: 16px;
-    }
-    #info-content p {
-      margin: 5px 0;
-    }
-    #search-input {
-      position: absolute;
-      top: 10px;
-      right: 10px;
-      padding: 8px;
-      border-radius: 5px;
-      border: none;
-      font-size: 14px;
-      z-index: 11;
-    }
-  </style>
-</head>
-<body>
+	<head>
+		<meta charset="UTF-8" />
+		<title>Visualisation SQL 3D</title>
+		<style>
+			body {
+				margin: 0;
+				overflow: hidden;
+			}
+			canvas {
+				display: block;
+			}
+			#info-panel {
+				position: absolute;
+				top: 10px;
+				left: 10px;
+				background: rgba(20, 20, 20, 0.85);
+				color: white;
+				padding: 10px 15px;
+				border-radius: 8px;
+				max-width: 300px;
+				font-family: sans-serif;
+				font-size: 14px;
+				z-index: 10;
+				box-shadow: 0 0 10px black;
+			}
+			#info-panel h2 {
+				margin: 0 0 10px 0;
+				font-size: 16px;
+			}
+			#info-content p {
+				margin: 5px 0;
+			}
+			#search-input {
+				position: absolute;
+				top: 10px;
+				right: 10px;
+				padding: 8px;
+				border-radius: 5px;
+				border: none;
+				font-size: 14px;
+				z-index: 11;
+			}
+		</style>
+	</head>
+	<body>
+		<div id="info-panel">
+			<h2>Détails</h2>
+			<div id="info-content">
+				<p>Clique sur un objet pour voir ses détails.</p>
+			</div>
+		</div>
+		<input
+			type="text"
+			id="search-input"
+			placeholder="Rechercher une base ou une table..." />
+		<script type="module">
+			import * as THREE from "https://cdn.jsdelivr.net/npm/three/build/three.module.js";
+			import { OrbitControls } from "./jsm/controls/OrbitControls.js";
 
-  <div id="info-panel">
-    <h2>Détails</h2>
-    <div id="info-content">
-      <p>Clique sur un objet pour voir ses détails.</p>
-    </div>
-  </div>
-  <input type="text" id="search-input" placeholder="Rechercher une base ou une table..." />
-  <script type="module">
-		import * as THREE from 'https://cdn.jsdelivr.net/npm/three/build/three.module.js';
-		import { OrbitControls } from './jsm/controls/OrbitControls.js';
+			let raycaster = new THREE.Raycaster();
+			let mouse = new THREE.Vector2();
+			let INTERSECTED = null;
+			const clickableObjects = [];
 
-    let raycaster = new THREE.Raycaster();
-    let mouse = new THREE.Vector2();
-    let INTERSECTED = null;
-    const clickableObjects = [];
+			const scene = new THREE.Scene();
+			scene.background = new THREE.Color(0x101020);
 
-    const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x101020);
+			const camera = new THREE.PerspectiveCamera(
+				75,
+				window.innerWidth / window.innerHeight,
+				0.1,
+				1000
+			);
+			camera.position.set(0, 20, 50);
 
-    const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-    camera.position.set(0, 20, 50);
+			const renderer = new THREE.WebGLRenderer({ antialias: true });
+			renderer.setSize(window.innerWidth, window.innerHeight);
+			renderer.shadowMap.enabled = true;
+			document.body.appendChild(renderer.domElement);
 
-    const renderer = new THREE.WebGLRenderer({ antialias: true });
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.shadowMap.enabled = true;
-    document.body.appendChild(renderer.domElement);
+			const controls = new OrbitControls(camera, renderer.domElement);
 
-    const controls = new OrbitControls(camera, renderer.domElement);
+			const ambient = new THREE.AmbientLight(0xffffff, 0.4);
+			scene.add(ambient);
 
-    const ambient = new THREE.AmbientLight(0xffffff, 0.4);
-    scene.add(ambient);
+			const light = new THREE.DirectionalLight(0xffffff, 0.8);
+			light.position.set(0, 50, 0);
 
-    const light = new THREE.DirectionalLight(0xffffff, 0.8);
-    light.position.set(0, 50, 0);
+			light.shadow.mapSize.width = 2028;
+			light.shadow.mapSize.height = 2028;
+			light.shadow.camera.near = 1;
+			light.shadow.camera.far = 500;
 
-    light.shadow.mapSize.width = 2028;
-    light.shadow.mapSize.height = 2028;
-    light.shadow.camera.near = 1;
-    light.shadow.camera.far = 500;
+			light.castShadow = true;
 
-    light.castShadow = true;
+			scene.add(light);
 
-    scene.add(light);
+			const floorMaterial = new THREE.MeshStandardMaterial({
+				color: 0xffffff,
+			});
+			const baseMaterial = new THREE.MeshStandardMaterial({
+				color: 0x00aaff,
+			});
+			const tableMaterial = new THREE.MeshStandardMaterial({
+				color: 0xffaa00,
+			});
 
-    const floorMaterial = new THREE.MeshStandardMaterial({ color: 0xffffff });
-    const baseMaterial = new THREE.MeshStandardMaterial({ color: 0x00aaff });
-    const tableMaterial = new THREE.MeshStandardMaterial({ color: 0xffaa00 });
+			const floor = new THREE.Mesh(
+				new THREE.BoxGeometry(1000, 0.2, 1000),
+				new THREE.MeshStandardMaterial({ color: 0x000000 })
+			);
+			floor.position.set(0, 0, 0);
+			floor.castShadow = true;
+			floor.receiveShadow = true;
+			scene.add(floor);
 
+			fetch("php/db_structure.php")
+				.then((res) => res.json())
+				.then((data) => {
+					console.log(data);
+					let baseZ = 0;
+					data.forEach((db, i) => {
+						const dbBox = new THREE.Mesh(
+							new THREE.BoxGeometry(4, 2, 4),
+							baseMaterial.clone()
+						);
+						dbBox.position.set(0, 1, baseZ);
+						dbBox.castShadow = true;
+						dbBox.receiveShadow = true;
+						dbBox.userData = { type: "database", name: db.name };
+						scene.add(dbBox);
+						clickableObjects.push(dbBox);
 
-    const floor = new THREE.Mesh(new THREE.BoxGeometry(1000, 0.2, 1000), floorMaterial.clone());
-    floor.position.set(0, 0, 0);
-    floor.castShadow = true;
-    floor.receiveShadow = true;
-    scene.add(floor);
+						const dbLabel = makeTextSprite(db.name, 0.5);
+						dbLabel.position.set(0, 3, baseZ);
+						scene.add(dbLabel);
 
+						const tables = db.tables;
+						const tablesParLigne = 5;
+						const spacingX = 3;
+						const spacingZ = 3;
 
+						let rowCount = 0;
 
-    fetch('php/db_structure.php')
-      .then(res => res.json())
-      .then(data => {
-        console.log(data)
-        let baseZ = 0;
-        data.forEach((db, i) => {
-          const dbBox = new THREE.Mesh(new THREE.BoxGeometry(4, 2, 4), baseMaterial.clone());
-          dbBox.position.set(0, 1, baseZ);
-          dbBox.castShadow = true;
-          dbBox.receiveShadow = true;
-          dbBox.userData = { type: 'database', name: db.name };
-          scene.add(dbBox);
-          clickableObjects.push(dbBox);
+						tables.forEach((table, j) => {
+							const col = j % tablesParLigne;
+							const row = Math.floor(j / tablesParLigne);
+							if (row > rowCount) rowCount = row;
 
-          const dbLabel = makeTextSprite(db.name, 0.5);
-          dbLabel.position.set(0, 3, baseZ);
-          scene.add(dbLabel);
+							const tBox = new THREE.Mesh(
+								new THREE.BoxGeometry(2, 0.5, 2),
+								tableMaterial.clone()
+							);
+							tBox.position.set(
+								col * spacingX,
+								0.5,
+								baseZ + (row + 1) * spacingZ
+							);
+							tBox.castShadow = true;
+							tBox.userData = {
+								type: "table",
+								name: table.name,
+								db: db.name,
+								columns: table.columns,
+								rows: table.rows,
+								nomsdescolonnes: table.nomsdescolonnes,
+							};
+							tBox.castShadow = true;
+							tBox.receiveShadow = true;
+							scene.add(tBox);
+							clickableObjects.push(tBox);
 
-          const tables = db.tables;
-          const tablesPerRow = 15;
-          const spacingX = 3;
-          const spacingZ = 3;
+							const tLabel = makeTextSprite(table.name, 0.3);
+							tLabel.position.set(tBox.position.x, 4, tBox.position.z);
+							scene.add(tLabel);
+						});
 
-          let rowCount = 0;
+						baseZ += (rowCount + 1) * spacingZ + 6;
+					});
+				});
 
-          tables.forEach((table, j) => {
-            const col = j % tablesPerRow;
-            const row = Math.floor(j / tablesPerRow);
-            if (row > rowCount) rowCount = row;
+			function makeTextSprite(message, scale = 1) {
+				const canvas = document.createElement("canvas");
+				const context = canvas.getContext("2d");
+				context.font = "Bold 24px Arial";
+				context.fillStyle = "white";
+				context.fillText(message, 10, 30);
 
-            const tBox = new THREE.Mesh(new THREE.BoxGeometry(2, 1, 2), tableMaterial.clone());
-            tBox.position.set(col * spacingX, 0.5, baseZ + (row + 1) * spacingZ);
-            tBox.castShadow = true;
-            tBox.userData = {
-              type: 'table',
-              name: table.name,
-              db: db.name,
-              columns: table.columns,
-              rows: table.rows,
-              nomsdescolonnes: table.nomsdescolonnes
-            };
-            tBox.castShadow = true;
-            tBox.receiveShadow = true;
-            scene.add(tBox);
-            clickableObjects.push(tBox);
+				const texture = new THREE.CanvasTexture(canvas);
+				const spriteMaterial = new THREE.SpriteMaterial({
+					map: texture,
+					transparent: true,
+				});
+				const sprite = new THREE.Sprite(spriteMaterial);
+				sprite.scale.set(5 * scale, 2 * scale, 1);
+				return sprite;
+			}
 
-            const tLabel = makeTextSprite(table.name, 0.3);
-            tLabel.position.set(tBox.position.x, 2, tBox.position.z);
-            scene.add(tLabel);
-          });
+			window.addEventListener("resize", () => {
+				camera.aspect = window.innerWidth / window.innerHeight;
+				camera.updateProjectionMatrix();
+				renderer.setSize(window.innerWidth, window.innerHeight);
+			});
 
-          baseZ += (rowCount + 1) * spacingZ + 6;
-        });
+			window.addEventListener("mousemove", (event) => {
+				mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+				mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+			});
 
-    });
+			window.addEventListener("click", () => {
+				if (INTERSECTED) {
+					const data = INTERSECTED.userData;
+					const content = document.getElementById("info-content");
 
-    function makeTextSprite(message, scale = 1) {
-      const canvas = document.createElement('canvas');
-      const context = canvas.getContext('2d');
-      context.font = "Bold 24px Arial";
-      context.fillStyle = "white";
-      context.fillText(message, 10, 30);
-
-      const texture = new THREE.CanvasTexture(canvas);
-      const spriteMaterial = new THREE.SpriteMaterial({ map: texture, transparent: true });
-      const sprite = new THREE.Sprite(spriteMaterial);
-      sprite.scale.set(5 * scale, 2 * scale, 1);
-      return sprite;
-    }
-
-    window.addEventListener('resize', () => {
-      camera.aspect = window.innerWidth / window.innerHeight;
-      camera.updateProjectionMatrix();
-      renderer.setSize(window.innerWidth, window.innerHeight);
-    });
-
-    window.addEventListener('mousemove', (event) => {
-      mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
-      mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
-    });
-
-    window.addEventListener('click', () => {
-      if (INTERSECTED) {
-        const data = INTERSECTED.userData;
-        const content = document.getElementById('info-content');
-
-        if (data.type === 'table') {
-          content.innerHTML = `
+					if (data.type === "table") {
+						content.innerHTML = `
             <p><strong>Table :</strong> ${data.name}</p>
             <p><strong>Base :</strong> ${data.db}</p>
             <p><strong>Colonnes :</strong> ${data.columns}</p>
             <p><strong>Lignes :</strong> ${data.rows}</p>
           `;
-        } else if (data.type === 'database') {
-          content.innerHTML = `
+					} else if (data.type === "database") {
+						content.innerHTML = `
             <p><strong>Base :</strong> ${data.name}</p>
             <p>(Clique sur une table pour plus de détails)</p>
           `;
-        }
-      }
-    });
+					}
+				}
+			});
 
-    function animate() {
-      requestAnimationFrame(animate);
+			function animate() {
+				requestAnimationFrame(animate);
 
-      // effet flottement + rotation
-      clickableObjects.forEach(obj => {
-        obj.rotation.y += 0.005;
-        obj.position.y += Math.sin(Date.now() * 0.001 + obj.position.x) * 0.005;
-      });
+				// effet flottement + rotation
+				clickableObjects.forEach((obj) => {
+					// obj.rotation.y += 0.005;
+					// obj.position.y +=
+					// 	Math.sin(Date.now() * 0.001 + obj.position.x) * 0.005;
+				});
 
-      raycaster.setFromCamera(mouse, camera);
-      const intersects = raycaster.intersectObjects(clickableObjects);
+				raycaster.setFromCamera(mouse, camera);
+				const intersects = raycaster.intersectObjects(clickableObjects);
 
-      if (intersects.length > 0) {
-        if (INTERSECTED !== intersects[0].object) {
-          if (INTERSECTED) INTERSECTED.material.emissive.setHex(0x000000);
-          INTERSECTED = intersects[0].object;
-          INTERSECTED.material.emissive.setHex(0x333333);
-        }
-      } else {
-        if (INTERSECTED) INTERSECTED.material.emissive.setHex(0x000000);
-        INTERSECTED = null;
-      }
+				if (intersects.length > 0) {
+					if (INTERSECTED !== intersects[0].object) {
+						if (INTERSECTED)
+							INTERSECTED.material.emissive.setHex(0x000000);
+						INTERSECTED = intersects[0].object;
+						INTERSECTED.material.emissive.setHex(0x333333);
+					}
+				} else {
+					if (INTERSECTED) INTERSECTED.material.emissive.setHex(0x000000);
+					INTERSECTED = null;
+				}
 
-      controls.update();
-      renderer.render(scene, camera);
-    }
+				controls.update();
+				renderer.render(scene, camera);
+			}
 
-    animate();
+			animate();
 
+			document
+				.getElementById("search-input")
+				.addEventListener("input", (e) => {
+					const query = e.target.value.toLowerCase();
 
-    document.getElementById('search-input').addEventListener('input', (e) => {
-      const query = e.target.value.toLowerCase();
-
-      clickableObjects.forEach(obj => {
-        const name = obj.userData.name.toLowerCase();
-        if (name.includes(query)) {
-          obj.material.emissive.setHex(0x00ff00); // vert fluo si match
-        } else {
-          obj.material.emissive.setHex(0x000000);
-        }
-      });
-    });
-  </script>
-</body>
+					clickableObjects.forEach((obj) => {
+						const name = obj.userData.name.toLowerCase();
+						if (name.includes(query)) {
+							obj.material.emissive.setHex(0x00ff00); // vert fluo si match
+						} else {
+							obj.material.emissive.setHex(0x000000);
+						}
+					});
+				});
+		</script>
+	</body>
 </html>
